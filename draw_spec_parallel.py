@@ -1,16 +1,93 @@
+# draw_spec_parallel.py
 from calc_spect import *
 from experiment import *
 from hamilton import *
+import os, copy, numpy as np
+from types import SimpleNamespace
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
+# —— 可选：限制 BLAS/OMP 线程，避免过度并行 ——
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
 
-class CalcStore:
-    """用来保存计算出的原始谱和偏移缩放后的谱（仿 calc 结构）"""
-    def __init__(self):
-        self.spec_raw = None   # shape: (N, 1 + n_atoms)
-        self.spec = None       # shape: (N, 1 + n_atoms)
+# ===== 把 worker 放在模块顶层（不是函数内部！）=====
+def _spec3_worker(exp_pack, in_state, precision):
+    """
+    exp_pack: 一个“可 picklable”的轻量对象（例如 SimpleNamespace/dict），
+              里面包含 spec3 所必需的字段。
+    """
+    # 如果你那边的 spec3 接受的是“富对象 experiment”，
+    # 就在这里把它还原；否则直接传 dict/namespace 进去。
+    # 这里示范用 SimpleNamespace：
+    experiment = SimpleNamespace(**exp_pack.__dict__)
+    # 深拷贝防止子进程彼此写冲突（保守做法）
+    experiment = copy.deepcopy(experiment)
 
-def gui_drawspec(experiment,
-                 calc: CalcStore,
+    x_, y1, y1r = spec3(experiment, in_state,
+                        savedata=False,
+                        precision=precision,
+                        plotspec=False)
+    return (in_state, np.asarray(x_), np.real(np.asarray(y1) + np.asarray(y1r)))
+
+# ===== 你原来的 gui_draw 里，把“并行三阶”的那段替换为下方版本 =====
+def accumulate_third_order_parallel(experiment, occ, nbr_of_states, x, atnr, precision):
+    """
+    返回 y2（与原串行版本含义相同）
+    """
+    # 仅挑选占据显著的初态
+    todo = [i for i in range(1, nbr_of_states + 1) if occ[i-1] > precision]
+    if not todo:
+        return np.zeros_like(x, dtype=float)
+
+    # —— 把 experiment 打包成“可 picklable”的轻量对象（重要）——
+    # 最稳妥做法：只放 spec3 需要的字段；不要塞进复杂/不可序列化成员
+    exp_pack = SimpleNamespace(
+        T=float(experiment.T),
+        lt=float(experiment.lt),
+        xrange=np.array(experiment.xrange, dtype=float) if np.ndim(experiment.xrange)==1 else float(experiment.xrange),
+        ptip=np.array(experiment.ptip, dtype=float),
+        psample=np.array(experiment.psample, dtype=float),
+        position=int(experiment.position),
+        jposition=int(getattr(experiment, "jposition", experiment.position)),
+        A=float(getattr(experiment, "A", 1.0)),
+        b=float(getattr(experiment, "b", 0.0)),
+        x0=float(getattr(experiment, "x0", 0.0)),
+        y0=float(getattr(experiment, "y0", 0.0)),
+        third_order_calc=bool(getattr(experiment, "third_order_calc", True)),
+        # 关键的量：
+        Eigenvec=np.array(experiment.Eigenvec),
+        Eigenval=np.array(experiment.Eigenval),
+        # atom：尽量保证其为简单结构。若是自定义类，建议在此打平成简单 namespace
+        atom=SimpleNamespace(
+            S=float(experiment.atom.S),
+            g=float(experiment.atom.g),
+            D=float(experiment.atom.D),
+            E=float(experiment.atom.E),
+            J=np.array(experiment.atom.J) if np.ndim(experiment.atom.J) else float(experiment.atom.J),
+            U=float(experiment.atom.U),
+            w=float(experiment.atom.w),
+            natoms=int(experiment.atom.natoms),
+        ),
+        rate_calc=bool(getattr(experiment, "rate_calc", False)),
+        entanglement=bool(getattr(experiment, "entanglement", False)),
+    )
+
+    y2 = np.zeros_like(x, dtype=float)
+    n_workers = min(os.cpu_count() or 1, len(todo))
+    # Windows 下建议使用 spawn 上下文（ProcessPoolExecutor 默认就是 spawn）
+    with ProcessPoolExecutor(max_workers=n_workers) as ex:
+        futures = [ex.submit(_spec3_worker, exp_pack, i, precision) for i in todo]
+        for fut in as_completed(futures):
+            i_done, x_ret, yret = fut.result()
+            if x_ret.shape != x.shape or np.max(np.abs(x_ret - x)) > 1e-12:
+                # 如果网格不一致，插值到主网格
+                yret = np.interp(x, x_ret, yret)
+            y2 += yret
+    return y2
+
+def gui_drawspec_parallel(experiment,
+                 calc=None,
                  savedata: bool = False,
                  precision: float = 1e-3,
                  normalize: bool = False,
@@ -72,24 +149,8 @@ def gui_drawspec(experiment,
             np.savetxt(f"data_2nd{atnr}.dat", np.column_stack([x, np.real(y)]), fmt="%.10g")
 
         # 三阶（把所有占据显著的初态 in 加权累加；spec3 内部已乘 occ(in)）
-        y2 = np.zeros_like(y, dtype=float)
-        if experiment.third_order_calc:
-            for i in range(1, nbr_of_states + 1):
-                if occ[i-1] > precision:
-                    # 简单的“进度条”输出
-                    cnt += 1
-                    # print(f'cnt={cnt}')
-                    print(f"  in={i}/{nbr_of_states}, tip at atom {atnr} ({cnt}/{maxcnt})")
-                    x_, y1, y1r = spec3(experiment, i, savedata=False, precision=precision, plotspec=False)
-                    # 与二阶相同电压网格假设；若不同，需要插值到 x 上
-                    y2 += np.real(y1 + y1r)
-                else:
-                    cnt += 1
+        y2 = accumulate_third_order_parallel(experiment, occ, nbr_of_states, x, atnr, precision)
 
-            if savedata:
-                np.savetxt(f"data_inelastic{atnr}.dat",
-                           np.column_stack([x, np.real(y2)]),
-                           fmt="%.10g")
 
         # 汇总每个原子的 (y + y2) 二阶+三阶
         col = np.real(y) + np.real(y2)
@@ -203,9 +264,3 @@ def gui_drawspec(experiment,
             plt.show()
         except Exception as e:
             print("Plot failed:", e)
-
-if __name__ == "__main__":
-
-    experiment=Experiment()
-    calcStore = CalcStore()
-    gui_drawspec(experiment, calcStore, debug=False)

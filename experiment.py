@@ -34,7 +34,7 @@ ArrayLike = Union[List[float], np.ndarray]
 class Experiment:
     # Core physics knobs
     T: float = 1 * 0.08617                 # temperature (meV)
-    xrange: float = 10.0                    # voltage span (mV) or grid elsewhere
+    xrange: float = 50.0                    # voltage span (mV) or grid elsewhere
     lt: float = 0.005                       # lifetime broadening (meV)
 
     # Tip / sample spin polarizations (Bloch vectors)
