@@ -15,7 +15,7 @@ if __name__ == '__main__':
     j56=1.7 # heisenberg_matrix
     jmat=[j12,j16,j23,j34,j45,j56] # 作图用
     A=2.6e-11 # tip-sample interaction
-    J=-0.6 # KONDO coupling
+    J=[-0.6,-0.6,-0.6,-0.6,-0.6,-0.6] # KONDO coupling
 
     save_calc=True # 是否保留计算的谱线
     # 计算下面部分用时

@@ -20,7 +20,7 @@ class Atom:
     g: float = 2.0     # g-factor
     D: float = 0.0     # axial anisotropy
     E: float = 0.0     # transverse anisotropy
-    J: Union[Number, Vec3] = -0.04  # exchange coupling (scalar or 3-tuple) kondo scattering
+    J = -0.04  # exchange coupling (scalar or 3-tuple) kondo scattering 若需指定每个位置不同的J,输入列表
     U: float = 0.0     # potential scattering strength
     w: float = 20.0    # bandwidth / cutoff
     natoms: int =2

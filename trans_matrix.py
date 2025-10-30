@@ -132,11 +132,14 @@ def M35(experiment, in_state):
 
         # J 可以是标量或 3 分量
         J = atoms.J
+        if np.ndim(J) == 0:
+            Smatrxx = J * (E.T @ matrxx @ E)
+            Smatrxy = J * (E.T @ matrxy @ E)
+            Smatrxz = J * (E.T @ matrxz @ E)
+            Smatrxu = np.zeros_like(Smatrxx, dtype=complex)
+        else:
+            assert np.ndim(J) == 1, "单个原子，应当输入标量 J(kondo)"
 
-        Smatrxx = J * matrxx
-        Smatrxy = J * matrxy
-        Smatrxz = J * matrxz
-        Smatrxu = np.zeros_like(Smatrxx, dtype=complex)
 
     else:
         nr  = int(experiment.position)     # 1-based
@@ -167,11 +170,16 @@ def M35(experiment, in_state):
 
         # 无纠缠，且样-样顶点与针-样同一位点：直接沿用 matr??，只乘 J 分量
         J = atoms.J
-
-        Smatrxx = J * (E.T @ matrxx @ E)
-        Smatrxy = J * (E.T @ matrxy @ E)
-        Smatrxz = J * (E.T @ matrxz @ E)
-        Smatrxu = np.zeros_like(Smatrxx, dtype=complex)
+        if np.ndim(J) == 0:
+            Smatrxx = J * (E.T @ matrxx @ E)
+            Smatrxy = J * (E.T @ matrxy @ E)
+            Smatrxz = J * (E.T @ matrxz @ E)
+            Smatrxu = np.zeros_like(Smatrxx, dtype=complex)
+        else:
+            Smatrxx = J[nr-1] * (E.T @ matrxx @ E)
+            Smatrxy = J[nr-1] * (E.T @ matrxy @ E)
+            Smatrxz = J[nr-1] * (E.T @ matrxz @ E)
+            Smatrxu = np.zeros_like(Smatrxx, dtype=complex)
 
 
         # 最后把针-样通道的 matr?? 也转到能量本征基
