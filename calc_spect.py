@@ -56,9 +56,16 @@ def spec2(experiment,
     xrange_val = experiment.xrange
     if np.ndim(xrange_val) == 1:
         x = np.asarray(xrange_val, dtype=float).copy()
-    else:
+    elif xrange_val<=20:
         V = abs(float(xrange_val))
         x = np.linspace(V, -V, 1000)  # 保持与原代码相同的降序
+    elif xrange_val > 20:
+        x = np.linspace(20, -20, 2000)
+        print("取得区间过大，已截断至20meV")
+
+
+
+
 
     y = np.zeros_like(x, dtype=float)
 
@@ -162,11 +169,15 @@ def spec3(experiment, in_state,
     rate, rater, raten, ratenr = M35(experiment, in_state)
     # 电压网格
     xrange_val = experiment.xrange
-    if np.ndim(xrange_val) == 1:  # 已给定网格
+    if np.ndim(xrange_val) == 1:
         x = np.asarray(xrange_val, dtype=float).copy()
-    else:
+    elif xrange_val <= 20:
         V = abs(float(xrange_val))
-        x = np.linspace(V, -V, 1000)  # 与 Scilab 一致：降序
+        x = np.linspace(V, -V, 1000)  # 保持与原代码相同的降序
+    elif xrange_val > 20:
+        x = np.linspace(20, -20, 2000)
+        print("取得区间过大，已截断至20meV")
+
 
     # 预分配
     y  = np.zeros_like(x, dtype=float)

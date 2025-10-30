@@ -208,4 +208,4 @@ if __name__ == "__main__":
 
     experiment=Experiment()
     calcStore = CalcStore()
-    gui_drawspec(experiment, calcStore, debug=False)
+    gui_drawspec(experiment, calcStore, debug=True)

@@ -2,6 +2,11 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
+from matplotlib import rcParams
+
+# 设置支持中文字体，避免中文显示乱码或缺失
+rcParams['font.sans-serif'] = ['SimHei']  # 指定黑体
+rcParams['axes.unicode_minus'] = False    # 解决负号 '-' 显示为方块的问题
 def get_data(filepath,xlabel="Bias (meV)", ylabel="dI/dV (a.u.)", title=None,
              savepath=None, show=False, markersize=12, alpha=0.9):
     """读取路径，返回数据"""
@@ -138,7 +143,8 @@ def plot_pairs_2n(
     markersize=12,
     alpha=0.9,
     linewidth=1.2,
-    show=True
+    show=True,
+    matrix=None
 ):
     """
     从 2*nimage 份 (X,Y) 数据文件生成 nimage 个图像画布；每个画布上画2组数据。
@@ -189,8 +195,8 @@ def plot_pairs_2n(
         raise ValueError(f"titles 长度应为 {natoms}，但收到 {len(titles)}。")
 
     # 计算子图网格
-    ncols = int(np.ceil(np.sqrt(natoms+2)))
-    nrows = int(np.ceil((natoms+2) / ncols))
+    ncols = int(np.ceil(np.sqrt(natoms+3)))
+    nrows = int(np.ceil((natoms+3) / ncols))
 
     # 增加 figsize，并为 tight_layout 增加填充
     fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 7.5, nrows * 5.0))  # 稍微增大尺寸
@@ -233,7 +239,7 @@ def plot_pairs_2n(
         label2 = f"calc spin{i+1}"
 
         ax.scatter(x1, y1, s=markersize, alpha=alpha, label=label1)
-        ax.plot(x2, y2, linewidth=linewidth, label=label2)
+        ax.plot(x2, y2, linewidth=linewidth, label=label2,color='red')
 
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
@@ -242,11 +248,20 @@ def plot_pairs_2n(
             ax.set_title(titles[i])
         else:
             ax.set_title(f"spin {i + 1} di/dv")
+    # 所用的海森堡矩阵
+    if matrix is not None:
+        ax = axes[natoms+2]
+        x = np.arange(len(matrix))
+        ax.bar(x, matrix, color='skyblue')
+        ax.set_title("J Matrix")
+        ax.set_xlabel('COUPLE')
+        ax.set_ylabel('J/meV')
 
-        # 隐藏未使用的子图
-    for j in range(natoms+2, nrows * ncols):
+
+    # 隐藏未使用的子图
+    for j in range(natoms+3, nrows * ncols):
         fig.delaxes(axes[j])
-    plt.tight_layout(pad=3.0)  # 增加填充，避免重叠
+    plt.tight_layout(pad=2.0)  # 增加填充，避免重叠
     if save_dir:
         # 保存整个画布，而不是单个子图
         out = os.path.join(save_dir, "combined_plots.png")
